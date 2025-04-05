@@ -42,20 +42,20 @@ def fetch_countries_from_disease_sh() -> List[Dict[str, Any]]:
         return []
 
 def fetch_vaccines_from_openfda(limit: int = 1000) -> List[Dict[str, Any]]:
-    """Fetch vaccine data from OpenFDA API using the drug label endpoint"""
-    print(f"Fetching up to {limit} vaccine labels from OpenFDA...")
+    """Fetch vaccine data from OpenFDA API"""
+    print(f"Fetching up to {limit} vaccines from OpenFDA...")
     
     all_vaccines = []
     try:
         for offset in range(0, limit, 100):  # Fetch in batches of 100
-            url = f"https://api.fda.gov/drug/label.json?api_key={OPENFDA_API_KEY}&search=indications_and_usage:vaccine+AND+warnings:[*%20TO%20*]&limit=100&skip={offset}"
+            url = f"https://api.fda.gov/drug/ndc.json?api_key={OPENFDA_API_KEY}&search=product_type:\"VACCINE\"&limit=100&skip={offset}"
             response = requests.get(url)
             
             if response.status_code == 200:
                 data = response.json()
                 batch = data.get('results', [])
                 all_vaccines.extend(batch)
-                print(f"Fetched batch of {len(batch)} vaccine labels (total so far: {len(all_vaccines)})")
+                print(f"Fetched batch of {len(batch)} vaccines (total so far: {len(all_vaccines)})")
                 
                 if len(batch) < 100:  # Less than requested means we've hit the end
                     break
@@ -72,8 +72,9 @@ def fetch_vaccines_from_openfda(limit: int = 1000) -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"Error connecting to OpenFDA API: {e}")
     
-    print(f"Retrieved a total of {len(all_vaccines)} vaccine labels")
+    print(f"Retrieved a total of {len(all_vaccines)} vaccines")
     return all_vaccines
+
 def process_countries(conn, countries: List[Dict[str, Any]]) -> Dict[str, int]:
     """Insert country data and return mapping of country names to IDs"""
     print("Processing country data...")
@@ -191,51 +192,44 @@ def get_country_mapping(vaccine_data: Dict[str, Any]) -> List[str]:
     return countries
 
 def process_vaccines(conn, vaccines: List[Dict[str, Any]], country_map: Dict[str, int]):
-    """Process and insert vaccine data from label endpoint"""
+    """Process and insert vaccine data"""
     print("Processing vaccine data...")
     cursor = conn.cursor()
     
     for vaccine in vaccines:
         try:
-            # Extract primary vaccine information from openfda section
-            if 'openfda' not in vaccine:
-                print("Skipping vaccine with no openfda section")
+            # Extract primary vaccine information
+            ndc_code = vaccine.get('product_ndc')
+            if not ndc_code:
                 continue
                 
-            openfda = vaccine['openfda']
-            
-            # The label endpoint may have multiple NDC codes - use the first one
-            if 'product_ndc' not in openfda or not openfda['product_ndc']:
-                print("Skipping vaccine with no NDC code")
-                continue
-                
-            ndc_code = openfda['product_ndc'][0]
-            
-            # Extract other metadata from openfda section
-            brand_name = clean_text(openfda.get('brand_name', [''])[0] if 'brand_name' in openfda and openfda['brand_name'] else '')
-            generic_name = clean_text(openfda.get('generic_name', [''])[0] if 'generic_name' in openfda and openfda['generic_name'] else '')
-            product_type = clean_text(openfda.get('product_type', ['VACCINE'])[0] if 'product_type' in openfda and openfda['product_type'] else 'VACCINE')
+            brand_name = clean_text(vaccine.get('brand_name', ''))
+            generic_name = clean_text(vaccine.get('generic_name', ''))
+            product_type = clean_text(vaccine.get('product_type', ''))
             
             # Route processing
             route_raw = None
-            if 'route' in openfda and openfda['route']:
-                route_raw = openfda['route'][0]
+            if 'route' in vaccine:
+                route_raw = vaccine['route'][0] if isinstance(vaccine['route'], list) and vaccine['route'] else vaccine['route']
             route = determine_route(route_raw)
             
             # Manufacturer info
             manufacturer = None
             is_original_packager = False
-            if 'manufacturer_name' in openfda and openfda['manufacturer_name']:
-                manufacturer = clean_text(openfda['manufacturer_name'][0])
-            if 'is_original_packager' in openfda and openfda['is_original_packager']:
-                is_original_packager = openfda['is_original_packager'][0] == 'true'
+            if 'openfda' in vaccine:
+                openfda = vaccine['openfda']
+                if 'manufacturer_name' in openfda and openfda['manufacturer_name']:
+                    manufacturer = clean_text(openfda['manufacturer_name'][0])
+                if 'is_original_packager' in openfda and openfda['is_original_packager']:
+                    is_original_packager = openfda['is_original_packager'][0] == True
             
             # Additional identifiers
             unii = None
-            if 'unii' in openfda and openfda['unii']:
-                unii = clean_text(openfda['unii'][0])
+            if 'active_ingredients' in vaccine and vaccine['active_ingredients']:
+                if 'unii' in vaccine['active_ingredients'][0]:
+                    unii = clean_text(vaccine['active_ingredients'][0]['unii'])
             
-            upc = ''  # UPC is typically not in the label endpoint
+            upc = clean_text(vaccine.get('upc', ''))
             
             # Insert vaccine
             cursor.execute(
@@ -249,37 +243,50 @@ def process_vaccines(conn, vaccines: List[Dict[str, Any]], country_map: Dict[str
                  is_original_packager, unii, upc)
             )
             
-            # Process ingredients (may need to parse from description/dosage text)
-            if 'active_ingredient' in vaccine and vaccine['active_ingredient']:
-                ingredient_text = vaccine['active_ingredient'][0] if isinstance(vaccine['active_ingredient'], list) else vaccine['active_ingredient']
-                # Simple parsing - split by commas or "and"
-                ingredients = [i.strip() for i in re.split(r',|\sand\s', ingredient_text)]
-                for ingredient_name in ingredients:
-                    if ingredient_name:
+            # Process ingredients
+            if 'active_ingredients' in vaccine and vaccine['active_ingredients']:
+                for ingredient in vaccine['active_ingredients']:
+                    name = clean_text(ingredient.get('name', ''))
+                    if name:
                         cursor.execute(
                             "INSERT INTO Ingredient (vaccine_ndc, substance_name, is_active) "
                             "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                            (ndc_code, ingredient_name, True)
+                            (ndc_code, name, True)
                         )
             
-            if 'inactive_ingredient' in vaccine and vaccine['inactive_ingredient']:
-                ingredient_text = vaccine['inactive_ingredient'][0] if isinstance(vaccine['inactive_ingredient'], list) else vaccine['inactive_ingredient']
-                # Simple parsing - split by commas
-                ingredients = [i.strip() for i in re.split(r',|\sand\s', ingredient_text)]
-                for ingredient_name in ingredients:
-                    if ingredient_name:
+            if 'inactive_ingredients' in vaccine and vaccine['inactive_ingredients']:
+                for ingredient_name in vaccine['inactive_ingredients']:
+                    name = clean_text(ingredient_name)
+                    if name:
                         cursor.execute(
                             "INSERT INTO Ingredient (vaccine_ndc, substance_name, is_active) "
                             "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-                            (ndc_code, ingredient_name, False)
+                            (ndc_code, name, False)
                         )
             
-            # Generate dosage info
+            # Generate dosage info (may need to be adapted based on actual data)
             dosage_text = None
-            if 'dosage_and_administration' in vaccine and vaccine['dosage_and_administration']:
-                dosage_text = vaccine['dosage_and_administration'][0] if isinstance(vaccine['dosage_and_administration'], list) else vaccine['dosage_and_administration']
-                if len(dosage_text) > 1000:
-                    dosage_text = dosage_text[:997] + "..."
+            if 'dosage_form' in vaccine and 'active_ingredients' in vaccine:
+                dosage_form = vaccine.get('dosage_form', '')
+                dosage_parts = []
+                
+                if dosage_form:
+                    dosage_parts.append(f"Dosage Form: {dosage_form}")
+                
+                if vaccine['active_ingredients']:
+                    for ingredient in vaccine['active_ingredients']:
+                        if 'strength' in ingredient and 'name' in ingredient:
+                            dosage_parts.append(f"{ingredient['name']}: {ingredient['strength']}")
+                
+                if 'dosage_and_administration' in vaccine:
+                    admin = vaccine.get('dosage_and_administration', [])
+                    if admin and isinstance(admin, list):
+                        dosage_parts.append(f"Administration: {admin[0]}")
+                
+                if dosage_parts:
+                    dosage_text = ". ".join(dosage_parts)
+                    if len(dosage_text) > 1000:
+                        dosage_text = dosage_text[:997] + "..."
             
             if dosage_text:
                 cursor.execute(
@@ -288,38 +295,18 @@ def process_vaccines(conn, vaccines: List[Dict[str, Any]], country_map: Dict[str
                     (ndc_code, dosage_text)
                 )
             
-            # Process warnings - the label endpoint has these in more detail
+            # Generate warnings
             if 'warnings' in vaccine and vaccine['warnings']:
-                warnings_text = vaccine['warnings'][0] if isinstance(vaccine['warnings'], list) else vaccine['warnings']
-                # Split long warnings into sections if needed
-                if len(warnings_text) > 5000:
-                    # Split into paragraphs or sections of manageable size
-                    warning_sections = re.split(r'\n\n|\r\n\r\n', warnings_text)
-                    for section in warning_sections:
-                        if section and len(section.strip()) > 0:
-                            cursor.execute(
-                                "INSERT INTO Warning (vaccine_ndc, warning) VALUES (%s, %s) "
-                                "ON CONFLICT DO NOTHING",
-                                (ndc_code, section[:5000])
-                            )
-                else:
-                    cursor.execute(
-                        "INSERT INTO Warning (vaccine_ndc, warning) VALUES (%s, %s) "
-                        "ON CONFLICT DO NOTHING",
-                        (ndc_code, warnings_text)
-                    )
+                warnings = vaccine['warnings'] if isinstance(vaccine['warnings'], list) else [vaccine['warnings']]
+                for warning_text in warnings:
+                    if warning_text:
+                        cursor.execute(
+                            "INSERT INTO Warning (vaccine_ndc, warning) VALUES (%s, %s) "
+                            "ON CONFLICT DO NOTHING",
+                            (ndc_code, warning_text)
+                        )
             
-            # Add other warnings-related sections if available
-            for warning_section in ['boxed_warning', 'warnings_and_cautions', 'contraindications']:
-                if warning_section in vaccine and vaccine[warning_section]:
-                    section_text = vaccine[warning_section][0] if isinstance(vaccine[warning_section], list) else vaccine[warning_section]
-                    cursor.execute(
-                        "INSERT INTO Warning (vaccine_ndc, warning) VALUES (%s, %s) "
-                        "ON CONFLICT DO NOTHING",
-                        (ndc_code, f"{warning_section.replace('_', ' ').title()}: {section_text[:5000]}")
-                    )
-            
-            # Process country-vaccine usage (similar to before)
+            # Process country-vaccine usage
             # First, extract countries from the vaccine data
             vaccine_countries = get_country_mapping(vaccine)
             
@@ -365,7 +352,7 @@ def process_vaccines(conn, vaccines: List[Dict[str, Any]], country_map: Dict[str
     
     conn.commit()
     print("Vaccine data processing complete")
-    
+
 def main():
     conn = connect_to_db()
     
