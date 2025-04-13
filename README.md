@@ -99,7 +99,7 @@ Run the scripts in the following order:
 
   Loads the CSV files into Neo4j as nodes and relationships.
 
-4. Run queries:
+Run queries:
 
 - `queries.py` 
  lets you run and test all SQL queries.
