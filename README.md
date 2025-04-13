@@ -81,4 +81,30 @@ The project covers all required query types for Phase II:
 - Indexing is handled manually for performance comparison using `PROFILE`.
 - All data was fetched in real-time to ensure variety and relevance in the dataset.
 
+---
+
+## How to Run 
+
+Run the scripts in the following order:
+
+- `fetch_and_generate_sql.py`  
+
+  Fetches live data from Disease.sh and OpenFDA, then stores it in PostgreSQL.
+
+- `export_tables.py`  
+
+  Exports all PostgreSQL tables as `.csv` files.
+
+- `import_neo4j.py`  
+
+  Loads the CSV files into Neo4j as nodes and relationships.
+
+4. Run queries:
+
+- `queries.py` 
+ lets you run and test all SQL queries.
+
+- `queries.cypher` 
+ open this file in Neo4j Browser to run Cypher queries.
+ 
 
