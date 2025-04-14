@@ -1,4 +1,14 @@
 
+## Final Report
+
+A detailed report documenting both Phase I and Phase II of the project, including data sources, schema design, migration process, query implementation, and key challenges encountered.
+
+[Final Reoprt](https://docs.google.com/document/d/1pClnfG_8c4wuiKjAQA5sA9NoDMYOor8FeOh28UpwvzI/edit?usp=sharing)
+
+
+
+
+
 ## Team
 
 | Name             | Student ID | GitHub ID       |
@@ -15,7 +25,7 @@ This project revolves around the integration of real-world vaccine and worldwide
 
 Phase II is especially focused on the transition from relational to NoSQL, rendering the data fully accessible through graph-based queries and performance-tuned.
 
----
+
 
 ## Main Files
 
@@ -29,7 +39,7 @@ Phase II is especially focused on the transition from relational to NoSQL, rende
 | `queries.py`           | Runs 23 SQL queries for testing the relational schema   |
 | `README.md`            | Instructions and project overview                       |
 
----
+
 
 ## Graph Entities
 
@@ -41,7 +51,7 @@ Phase II is especially focused on the transition from relational to NoSQL, rende
   - `[:HAS_WARNING]`
   - `[:USES_VACCINE]`
 
----
+
 
 ## Queries Implemented
 
@@ -54,7 +64,7 @@ The project covers all required query types for Phase II:
 - Indexing and performance comparison (using PROFILE)
 - Full-text search with Neo4j fulltext indexes
 
----
+
 
 ## Phase II File Mapping & Requirements
 
@@ -72,7 +82,7 @@ The project covers all required query types for Phase II:
 
 
 
----
+
 
 ## Notes
 
@@ -81,7 +91,6 @@ The project covers all required query types for Phase II:
 - Indexing is handled manually for performance comparison using `PROFILE`.
 - All data was fetched in real-time to ensure variety and relevance in the dataset.
 
----
 
 ## How to Run 
 
