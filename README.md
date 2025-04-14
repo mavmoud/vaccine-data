@@ -5,7 +5,7 @@ A detailed report documenting both Phase I and Phase II of the project, includin
 
 [Final Reoprt](https://docs.google.com/document/d/1pClnfG_8c4wuiKjAQA5sA9NoDMYOor8FeOh28UpwvzI/edit?usp=sharing)
 
-[Demo](https://bit.ly/vaccine-data-363)
+[Demo](https://dub.sh/363-vaccine-data)
 
 
 
