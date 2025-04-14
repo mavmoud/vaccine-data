@@ -153,7 +153,25 @@ QUERIES = {
         (SELECT c.id FROM Country)
         EXCEPT
         (SELECT cvu.country_id FROM CountryVaccineUsage cvu WHERE cvu.vaccine_ndc = v.ndc_code)
-    );"""
+    );""",
+    # -- Show all warnings for a given vaccine brand name
+    24: """SELECT v.brand_name, w.warning
+    FROM Vaccine v
+    JOIN Warning w ON v.ndc_code = w.vaccine_ndc
+    WHERE v.brand_name ILIKE '%Comirnaty%';""",
+
+# -- Find vaccines with more than 2 warnings
+    25: """SELECT v.brand_name, COUNT(w.id) AS num_warnings
+    FROM Vaccine v
+    JOIN Warning w ON v.ndc_code = w.vaccine_ndc
+    GROUP BY v.brand_name
+    HAVING COUNT(w.id) > 2;""",
+
+# -- Search vaccines by warning keyword (e.g., allergy)
+    26: """SELECT DISTINCT v.brand_name, w.warning
+    FROM Vaccine v
+    JOIN Warning w ON v.ndc_code = w.vaccine_ndc
+    WHERE w.warning ILIKE '%allergic%';""",
 
 }
 
@@ -244,6 +262,10 @@ if __name__ == "__main__":
         "21: Covering constraint query\n"
         "22: Division operator using nested query (NOT IN)\n"
         "23: Division operator using correlated subquery (NOT EXISTS and EXCEPT)\n"
+        "23: Division operator using correlated subquery (NOT EXISTS and EXCEPT)\n"
+        "24: Show all warnings for a given vaccine brand\n"
+        "25: Vaccines with more than 2 warnings\n"
+        "26: Search vaccines by warning keyword\n"
     )
 
     print(menu)
